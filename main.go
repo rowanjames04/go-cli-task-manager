@@ -18,9 +18,11 @@ func main() {
 
 	for {
 		fmt.Println("\nTask Manager")
+		fmt.Println()
 		fmt.Println("1. Add Task")
 		fmt.Println("2. List Tasks")
 		fmt.Println("3. Exit")
+		fmt.Println()
 		fmt.Print("Choose option: ")
 
 		input,_ := reader.ReadString('\n')
@@ -29,7 +31,9 @@ func main() {
 
 		switch input {
 		case "1":
+
 			fmt.Println("Enter the task description: ")
+			fmt.Println()
 			
 			description,_ := reader.ReadString('\n')
 			description = strings.TrimSpace(description)
@@ -37,22 +41,31 @@ func main() {
 			tasks = append(tasks, Task{Description: description})
 
 			fmt.Println("Task added")
+			fmt.Println()
 
 		case "2":
-			if len(tasks) < 1{
+
+			if len(tasks) < 1 {
+
 				fmt.Println("No tasks")
 			} else {
+
 				fmt.Println("Tasks: ")
+
 				for i, task := range tasks {
-					fmt.Println("%d. %s\n", i + 1, task.Description)
+					fmt.Printf("%d. %s\n", i + 1, task.Description)
 				}
+				
+				fmt.Println()
 			}
 
 		case "3":
+
 			fmt.Println("Exiting")
 			os.Exit(0)
 
 		default:
+			
 			fmt.Println("Invalid option")
 		}
 	}
