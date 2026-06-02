@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -27,13 +28,25 @@ func main() {
 
 	// Add command
 	var priority int
+	var dueStr string
 	addCmd := &cobra.Command{
 		Use:   "add [description]",
 		Short: "Add a new task",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			taskDescription := strings.Join(args, " ")
-			task, err := store.Add(taskDescription, priority)
+
+			var dueDate *time.Time
+			if dueStr != "" {
+				t, err := time.Parse("2006-01-02", dueStr)
+				if err != nil {
+					fmt.Println("Invalid date format. Use YYYY-MM-DD")
+					return
+				}
+				dueDate = &t
+			}
+
+			task, err := store.Add(taskDescription, priority, dueDate)
 			if err != nil {
 				fmt.Println("Error:", err)
 				return
@@ -42,6 +55,7 @@ func main() {
 		},
 	}
 	addCmd.Flags().IntVarP(&priority, "priority", "p", 2, "Priority level (1=Low, 2=Medium, 3=High)")
+	addCmd.Flags().StringVarP(&dueStr, "due", "d", "", "Due date in YYYY-MM-DD format")
 
 	// Done command
 	doneCmd := &cobra.Command{
@@ -125,6 +139,30 @@ func main() {
 		},
 	}
 
+	// Due command
+	dueCmd := &cobra.Command{
+		Use:   "due [id] [date]",
+		Short: "Set a due date for a task",
+		Args:  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			t, err := time.Parse("2006-01-02", args[1])
+			if err != nil {
+				fmt.Println("Invalid date format. Use YYYY-MM-DD")
+				return
+			}
+			if err := store.SetDueDate(num, &t); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Task %d due date set to %s\n", num, args[1])
+		},
+	}
+
 	// List command
 	var filterPending bool
 	var filterCompleted bool
@@ -148,7 +186,6 @@ func main() {
 			}
 
 			if sortByPriority {
-				// Simple bubble sort for priority (High to Low)
 				for i := 0; i < len(filteredTasks); i++ {
 					for j := i + 1; j < len(filteredTasks); j++ {
 						if filteredTasks[i].Priority < filteredTasks[j].Priority {
@@ -163,6 +200,7 @@ func main() {
 				return
 			}
 
+			now := time.Now().Truncate(24 * time.Hour)
 			for _, task := range filteredTasks {
 				status := "[ ]"
 				if task.Completed {
@@ -175,8 +213,16 @@ func main() {
 				case 3:
 					priorityLabel = "High"
 				}
-				fmt.Printf("%d. %s [%s] %s\n", task.ID, status, priorityLabel, task.Description)
-				// Wait, a small typo in the printf above, it says priorityLabel twice.
+
+				dueLabel := ""
+				if task.DueDate != nil {
+					dueLabel = fmt.Sprintf(" (Due: %s)", task.DueDate.Format("2006-01-02"))
+					if task.DueDate.Before(now) && !task.Completed {
+						dueLabel = " ⚠️ " + dueLabel
+					}
+				}
+
+				fmt.Printf("%d. %s [%s] %s%s\n", task.ID, status, priorityLabel, task.Description, dueLabel)
 			}
 		},
 	}
@@ -184,7 +230,7 @@ func main() {
 	listCmd.Flags().BoolVarP(&filterCompleted, "completed", "c", false, "Show only completed tasks")
 	listCmd.Flags().BoolVarP(&sortByPriority, "priority", "s", false, "Sort by priority (High to Low)")
 
-	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, listCmd)
+	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, listCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

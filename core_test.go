@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestStore_Add(t *testing.T) {
@@ -12,7 +13,7 @@ func TestStore_Add(t *testing.T) {
 	store := NewStore(tmpFile)
 
 	t.Run("Add first task", func(t *testing.T) {
-		task, err := store.Add("First Task", 2)
+		task, err := store.Add("First Task", 2, nil)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -31,7 +32,7 @@ func TestStore_Add(t *testing.T) {
 	})
 
 	t.Run("Add second task", func(t *testing.T) {
-		task, err := store.Add("Second Task", 3)
+		task, err := store.Add("Second Task", 3, nil)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -49,9 +50,9 @@ func TestStore_Delete(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	store.Add("Task 1", 2)
-	store.Add("Task 2", 2)
-	store.Add("Task 3", 2)
+	store.Add("Task 1", 2, nil)
+	store.Add("Task 2", 2, nil)
+	store.Add("Task 3", 2, nil)
 
 	t.Run("Delete existing task", func(t *testing.T) {
 		err := store.Delete(2)
@@ -83,7 +84,7 @@ func TestStore_ToggleCompleted(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Completion", 2)
+	task, _ := store.Add("Test Completion", 2, nil)
 
 	t.Run("Mark as completed", func(t *testing.T) {
 		err := store.ToggleCompleted(task.ID)
@@ -122,7 +123,7 @@ func TestStore_UpdateDescription(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Original Description", 2)
+	task, _ := store.Add("Original Description", 2, nil)
 
 	t.Run("Update existing task", func(t *testing.T) {
 		err := store.UpdateDescription(task.ID, "Updated Description")
@@ -149,7 +150,7 @@ func TestStore_SetPriority(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Priority", 2)
+	task, _ := store.Add("Test Priority", 2, nil)
 
 	t.Run("Set priority", func(t *testing.T) {
 		err := store.SetPriority(task.ID, 3)
@@ -167,6 +168,34 @@ func TestStore_SetPriority(t *testing.T) {
 		err := store.SetPriority(99, 1)
 		if err == nil {
 			t.Error("Expected error when setting priority for non-existent task, got nil")
+		}
+	})
+}
+
+func TestStore_SetDueDate(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	task, _ := store.Add("Due Task", 2, nil)
+	now := time.Now()
+
+	t.Run("Set due date", func(t *testing.T) {
+		err := store.SetDueDate(task.ID, &now)
+		if err != nil {
+			t.Fatalf("Failed to set due date: %v", err)
+		}
+
+		tasks, _ := store.Read()
+		if tasks[0].DueDate == nil || !tasks[0].DueDate.Equal(now) {
+			t.Errorf("Expected due date %v, got %v", now, tasks[0].DueDate)
+		}
+	})
+
+	t.Run("Set due date non-existent task", func(t *testing.T) {
+		err := store.SetDueDate(99, &now)
+		if err == nil {
+			t.Error("Expected error when setting due date for non-existent task, got nil")
 		}
 	})
 }

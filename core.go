@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // Task represents a single task in the system.
 type Task struct {
-	ID          int    `json:"id"`
-	Description string `json:"description"`
-	Completed   bool   `json:"completed"`
-	Priority    int    `json:"priority"` // 1: Low, 2: Medium, 3: High
+	ID          int        `json:"id"`
+	Description string     `json:"description"`
+	Completed   bool       `json:"completed"`
+	Priority    int        `json:"priority"` // 1: Low, 2: Medium, 3: High
+	DueDate     *time.Time `json:"due_date,omitempty"`
 }
 
 // Store handles the persistence of tasks to a JSON file.
@@ -63,7 +65,7 @@ func (s *Store) Write(tasks []Task) error {
 }
 
 // Add creates a new task and persists the updated list.
-func (s *Store) Add(description string, priority int) (Task, error) {
+func (s *Store) Add(description string, priority int, dueDate *time.Time) (Task, error) {
 	tasks, err := s.Read()
 	if err != nil {
 		return Task{}, err
@@ -85,6 +87,7 @@ func (s *Store) Add(description string, priority int) (Task, error) {
 		Description: description,
 		Completed:   false,
 		Priority:    priority,
+		DueDate:     dueDate,
 	}
 
 	tasks = append(tasks, newTask)
@@ -153,6 +156,29 @@ func (s *Store) SetPriority(id int, priority int) error {
 	for i := range tasks {
 		if tasks[i].ID == id {
 			tasks[i].Priority = priority
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
+// SetDueDate updates the due date of an existing task.
+func (s *Store) SetDueDate(id int, dueDate *time.Time) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			tasks[i].DueDate = dueDate
 			found = true
 			break
 		}
