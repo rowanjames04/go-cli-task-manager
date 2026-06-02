@@ -1,3 +1,5 @@
+// Package main provides core functionalities for a task management application,
+// including reading from and writing to a task file, adding new tasks, and deleting existing tasks.
 package main
 
 import (
@@ -7,6 +9,8 @@ import (
 	"os"
 )
 
+// readTasks reads tasks from the specified file and returns them as a slice of strings.
+// It handles potential file opening errors and strips numerical prefixes from the task lines.
 func readTasks(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -31,6 +35,8 @@ func readTasks(filename string) ([]string, error) {
 	return tasks, scanner.Err()
 }
 
+// writeTasks writes the given slice of tasks to the specified file,
+// prefixing each task with its 1-based index.
 func writeTasks(filename string, tasks []string) error {
 	file, err := os.Create(filename)
 	if err != nil {
@@ -47,6 +53,8 @@ func writeTasks(filename string, tasks []string) error {
 	return writer.Flush()
 }
 
+// addTask reads existing tasks, appends the new task, and writes all tasks back to the file.
+// It creates the file if it does not exist.
 func addTask(filename string, task string) error {
 	tasks, err := readTasks(filename)
 	if err != nil && !os.IsNotExist(err) {
@@ -57,6 +65,8 @@ func addTask(filename string, task string) error {
 	return writeTasks(filename, tasks)
 }
 
+// deleteTask removes a task by its 1-based number from the specified file.
+// It returns an error if the task number is out of bounds.
 func deleteTask(filename string, taskNumber int) error {
 	tasks, err := readTasks(filename)
 	if err != nil {
