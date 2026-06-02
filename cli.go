@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 const taskFile = "tasks.json"
@@ -18,165 +20,127 @@ func main() {
 		fmt.Printf("Migration error: %v\n", err)
 	}
 
-	if len(os.Args) < 2 {
-		printUsage()
-		return
+	rootCmd := &cobra.Command{
+		Use:   "taskmanager",
+		Short: "A simple CLI task manager",
 	}
 
-	command := os.Args[1]
-
-	switch command {
-	case "add":
-		handleAdd(store)
-	case "edit":
-		handleEdit(store)
-	case "delete":
-		handleDelete(store)
-	case "done":
-		handleDone(store)
-	case "list":
-		handleList(store)
-	default:
-		fmt.Println("Unknown command:", command)
-		printUsage()
-	}
-}
-
-func handleAdd(store *Store) {
-	if len(os.Args) < 3 {
-		fmt.Println("Missing task description")
-		return
+	// Add command
+	addCmd := &cobra.Command{
+		Use:   "add [description]",
+		Short: "Add a new task",
+		Args:  cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			taskDescription := strings.Join(args, " ")
+			task, err := store.Add(taskDescription)
+			if err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Task added: %s (ID: %d)\n", task.Description, task.ID)
+		},
 	}
 
-	taskDescription := strings.Join(os.Args[2:], " ")
-
-	task, err := store.Add(taskDescription)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	// Done command
+	doneCmd := &cobra.Command{
+		Use:   "done [id]",
+		Short: "Mark a task as completed",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			if err := store.ToggleCompleted(num); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Toggled completion for task %d\n", num)
+		},
 	}
 
-	fmt.Printf("Task added: %s (ID: %d)\n", task.Description, task.ID)
-}
-
-func handleDelete(store *Store) {
-	if len(os.Args) < 3 {
-		fmt.Println("Missing task number")
-		return
+	// Delete command
+	deleteCmd := &cobra.Command{
+		Use:   "delete [id]",
+		Short: "Delete a task",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			if err := store.Delete(num); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Println("Deleted task", num)
+		},
 	}
 
-	num, err := strconv.Atoi(os.Args[2])
-	if err != nil {
-		fmt.Println("Task number must be an integer")
-		return
+	// Edit command
+	editCmd := &cobra.Command{
+		Use:   "edit [id] [description]",
+		Short: "Edit a task description",
+		Args:  cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			newDescription := strings.Join(args[1:], " ")
+			if err := store.UpdateDescription(num, newDescription); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Task %d updated to: %s\n", num, newDescription)
+		},
 	}
 
-	if err := store.Delete(num); err != nil {
-		fmt.Println("Error:", err)
-		return
+	// List command
+	var filterPending bool
+	var filterCompleted bool
+
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all tasks",
+		Run: func(cmd *cobra.Command, args []string) {
+			tasks, err := store.Read()
+			if err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+
+			var filteredTasks []Task
+			for _, task := range tasks {
+				if (!filterPending && !filterCompleted) || (filterPending && !task.Completed) || (filterCompleted && task.Completed) {
+					filteredTasks = append(filteredTasks, task)
+				}
+			}
+
+			if len(filteredTasks) == 0 {
+				fmt.Println("No matching tasks found 🎉")
+				return
+			}
+
+			for _, task := range filteredTasks {
+				status := "[ ]"
+				if task.Completed {
+					status = "[x]"
+				}
+				fmt.Printf("%d. %s %s\n", task.ID, status, task.Description)
+			}
+		},
 	}
+	listCmd.Flags().BoolVarP(&filterPending, "pending", "p", false, "Show only pending tasks")
+	listCmd.Flags().BoolVarP(&filterCompleted, "completed", "c", false, "Show only completed tasks")
 
-	fmt.Println("Deleted task", num)
-}
+	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, listCmd)
 
-func handleEdit(store *Store) {
-	if len(os.Args) < 4 {
-		fmt.Println("Usage: edit <task number> \"new description\"")
-		return
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
-
-	num, err := strconv.Atoi(os.Args[2])
-	if err != nil {
-		fmt.Println("Task number must be an integer")
-		return
-	}
-
-	newDescription := strings.Join(os.Args[3:], " ")
-
-	if err := store.UpdateDescription(num, newDescription); err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-
-	fmt.Printf("Task %d updated to: %s\n", num, newDescription)
-}
-
-func handleDone(store *Store) {
-	if len(os.Args) < 3 {
-		fmt.Println("Missing task number")
-		return
-	}
-
-	num, err := strconv.Atoi(os.Args[2])
-	if err != nil {
-		fmt.Println("Task number must be an integer")
-		return
-	}
-
-	if err := store.ToggleCompleted(num); err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-
-	fmt.Printf("Toggled completion for task %d\n", num)
-}
-
-func handleList(store *Store) {
-	tasks, err := store.Read()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-
-	// Filtering
-	showAll := false
-	filterPending := false
-	filterCompleted := false
-
-	for _, arg := range os.Args[2:] {
-		switch arg {
-		case "--pending":
-			filterPending = true
-			showAll = false
-		case "--completed":
-			filterCompleted = true
-			showAll = false
-		}
-	}
-
-	// If no specific filter flag was provided, we show all (default behavior)
-	// but if we want to support a clear --all flag, we can.
-	// For now, if neither is set, we just list everything.
-	if !filterPending && !filterCompleted {
-		showAll = true
-	}
-
-	var filteredTasks []Task
-	for _, task := range tasks {
-		if showAll || (filterPending && !task.Completed) || (filterCompleted && task.Completed) {
-			filteredTasks = append(filteredTasks, task)
-		}
-	}
-
-	if len(filteredTasks) == 0 {
-		fmt.Println("No matching tasks found 🎉")
-		return
-	}
-
-	for _, task := range filteredTasks {
-		status := "[ ]"
-		if task.Completed {
-			status = "[x]"
-		}
-		fmt.Printf("%d. %s %s\n", task.ID, status, task.Description)
-	}
-}
-
-func printUsage() {
-	fmt.Println("Usage:")
-	fmt.Println("  add \"task description\"")
-	fmt.Println("  edit <task number> \"new description\"")
-	fmt.Println("  done <task number>")
-	fmt.Println("  delete <task number>")
-	fmt.Println("  list [--pending | --completed]")
 }
