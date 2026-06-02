@@ -128,12 +128,42 @@ func handleList(store *Store) {
 		return
 	}
 
-	if len(tasks) == 0 {
-		fmt.Println("No tasks found 🎉")
+	// Filtering
+	showAll := false
+	filterPending := false
+	filterCompleted := false
+
+	for _, arg := range os.Args[2:] {
+		switch arg {
+		case "--pending":
+			filterPending = true
+			showAll = false
+		case "--completed":
+			filterCompleted = true
+			showAll = false
+		}
+	}
+
+	// If no specific filter flag was provided, we show all (default behavior)
+	// but if we want to support a clear --all flag, we can.
+	// For now, if neither is set, we just list everything.
+	if !filterPending && !filterCompleted {
+		showAll = true
+	}
+
+	var filteredTasks []Task
+	for _, task := range tasks {
+		if showAll || (filterPending && !task.Completed) || (filterCompleted && task.Completed) {
+			filteredTasks = append(filteredTasks, task)
+		}
+	}
+
+	if len(filteredTasks) == 0 {
+		fmt.Println("No matching tasks found 🎉")
 		return
 	}
 
-	for _, task := range tasks {
+	for _, task := range filteredTasks {
 		status := "[ ]"
 		if task.Completed {
 			status = "[x]"
@@ -148,5 +178,5 @@ func printUsage() {
 	fmt.Println("  edit <task number> \"new description\"")
 	fmt.Println("  done <task number>")
 	fmt.Println("  delete <task number>")
-	fmt.Println("  list")
+	fmt.Println("  list [--pending | --completed]")
 }
