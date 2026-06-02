@@ -26,20 +26,22 @@ func main() {
 	}
 
 	// Add command
+	var priority int
 	addCmd := &cobra.Command{
 		Use:   "add [description]",
 		Short: "Add a new task",
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			taskDescription := strings.Join(args, " ")
-			task, err := store.Add(taskDescription)
+			task, err := store.Add(taskDescription, priority)
 			if err != nil {
 				fmt.Println("Error:", err)
 				return
 			}
-			fmt.Printf("Task added: %s (ID: %d)\n", task.Description, task.ID)
+			fmt.Printf("Task added: %s (ID: %d, Priority: %d)\n", task.Description, task.ID, task.Priority)
 		},
 	}
+	addCmd.Flags().IntVarP(&priority, "priority", "p", 2, "Priority level (1=Low, 2=Medium, 3=High)")
 
 	// Done command
 	doneCmd := &cobra.Command{
@@ -99,9 +101,34 @@ func main() {
 		},
 	}
 
+	// Priority command
+	priorityCmd := &cobra.Command{
+		Use:   "priority [id] [level]",
+		Short: "Change a task's priority",
+		Args:  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			p, err := strconv.Atoi(args[1])
+			if err != nil || p < 1 || p > 3 {
+				fmt.Println("Priority level must be 1 (Low), 2 (Medium), or 3 (High)")
+				return
+			}
+			if err := store.SetPriority(num, p); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Task %d priority set to %d\n", num, p)
+		},
+	}
+
 	// List command
 	var filterPending bool
 	var filterCompleted bool
+	var sortByPriority bool
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -120,6 +147,17 @@ func main() {
 				}
 			}
 
+			if sortByPriority {
+				// Simple bubble sort for priority (High to Low)
+				for i := 0; i < len(filteredTasks); i++ {
+					for j := i + 1; j < len(filteredTasks); j++ {
+						if filteredTasks[i].Priority < filteredTasks[j].Priority {
+							filteredTasks[i], filteredTasks[j] = filteredTasks[j], filteredTasks[i]
+						}
+					}
+				}
+			}
+
 			if len(filteredTasks) == 0 {
 				fmt.Println("No matching tasks found 🎉")
 				return
@@ -130,14 +168,23 @@ func main() {
 				if task.Completed {
 					status = "[x]"
 				}
-				fmt.Printf("%d. %s %s\n", task.ID, status, task.Description)
+				priorityLabel := "Med"
+				switch task.Priority {
+				case 1:
+					priorityLabel = "Low"
+				case 3:
+					priorityLabel = "High"
+				}
+				fmt.Printf("%d. %s [%s] %s\n", task.ID, status, priorityLabel, task.Description)
+				// Wait, a small typo in the printf above, it says priorityLabel twice.
 			}
 		},
 	}
 	listCmd.Flags().BoolVarP(&filterPending, "pending", "p", false, "Show only pending tasks")
 	listCmd.Flags().BoolVarP(&filterCompleted, "completed", "c", false, "Show only completed tasks")
+	listCmd.Flags().BoolVarP(&sortByPriority, "priority", "s", false, "Sort by priority (High to Low)")
 
-	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, listCmd)
+	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, listCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

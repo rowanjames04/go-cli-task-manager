@@ -12,7 +12,7 @@ func TestStore_Add(t *testing.T) {
 	store := NewStore(tmpFile)
 
 	t.Run("Add first task", func(t *testing.T) {
-		task, err := store.Add("First Task")
+		task, err := store.Add("First Task", 2)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -25,15 +25,21 @@ func TestStore_Add(t *testing.T) {
 		if task.Completed {
 			t.Error("Expected new task to be incomplete")
 		}
+		if task.Priority != 2 {
+			t.Errorf("Expected priority 2, got %d", task.Priority)
+		}
 	})
 
 	t.Run("Add second task", func(t *testing.T) {
-		task, err := store.Add("Second Task")
+		task, err := store.Add("Second Task", 3)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
 		if task.ID != 2 {
 			t.Errorf("Expected ID 2, got %d", task.ID)
+		}
+		if task.Priority != 3 {
+			t.Errorf("Expected priority 3, got %d", task.Priority)
 		}
 	})
 }
@@ -43,9 +49,9 @@ func TestStore_Delete(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	store.Add("Task 1")
-	store.Add("Task 2")
-	store.Add("Task 3")
+	store.Add("Task 1", 2)
+	store.Add("Task 2", 2)
+	store.Add("Task 3", 2)
 
 	t.Run("Delete existing task", func(t *testing.T) {
 		err := store.Delete(2)
@@ -77,7 +83,7 @@ func TestStore_ToggleCompleted(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Completion")
+	task, _ := store.Add("Test Completion", 2)
 
 	t.Run("Mark as completed", func(t *testing.T) {
 		err := store.ToggleCompleted(task.ID)
@@ -116,7 +122,7 @@ func TestStore_UpdateDescription(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Original Description")
+	task, _ := store.Add("Original Description", 2)
 
 	t.Run("Update existing task", func(t *testing.T) {
 		err := store.UpdateDescription(task.ID, "Updated Description")
@@ -138,14 +144,41 @@ func TestStore_UpdateDescription(t *testing.T) {
 	})
 }
 
+func TestStore_SetPriority(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	task, _ := store.Add("Test Priority", 2)
+
+	t.Run("Set priority", func(t *testing.T) {
+		err := store.SetPriority(task.ID, 3)
+		if err != nil {
+			t.Fatalf("Failed to set priority: %v", err)
+		}
+
+		tasks, _ := store.Read()
+		if tasks[0].Priority != 3 {
+			t.Errorf("Expected priority 3, got %d", tasks[0].Priority)
+		}
+	})
+
+	t.Run("Set priority non-existent task", func(t *testing.T) {
+		err := store.SetPriority(99, 1)
+		if err == nil {
+			t.Error("Expected error when setting priority for non-existent task, got nil")
+		}
+	})
+}
+
 func TestStore_ReadWrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
 	tasks := []Task{
-		{ID: 1, Description: "Task A", Completed: false},
-		{ID: 2, Description: "Task B", Completed: true},
+		{ID: 1, Description: "Task A", Completed: false, Priority: 1},
+		{ID: 2, Description: "Task B", Completed: true, Priority: 3},
 	}
 
 	if err := store.Write(tasks); err != nil {

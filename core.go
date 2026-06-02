@@ -13,6 +13,7 @@ type Task struct {
 	ID          int    `json:"id"`
 	Description string `json:"description"`
 	Completed   bool   `json:"completed"`
+	Priority    int    `json:"priority"` // 1: Low, 2: Medium, 3: High
 }
 
 // Store handles the persistence of tasks to a JSON file.
@@ -62,7 +63,7 @@ func (s *Store) Write(tasks []Task) error {
 }
 
 // Add creates a new task and persists the updated list.
-func (s *Store) Add(description string) (Task, error) {
+func (s *Store) Add(description string, priority int) (Task, error) {
 	tasks, err := s.Read()
 	if err != nil {
 		return Task{}, err
@@ -83,6 +84,7 @@ func (s *Store) Add(description string) (Task, error) {
 		ID:          newID,
 		Description: description,
 		Completed:   false,
+		Priority:    priority,
 	}
 
 	tasks = append(tasks, newTask)
@@ -128,6 +130,29 @@ func (s *Store) UpdateDescription(id int, description string) error {
 	for i := range tasks {
 		if tasks[i].ID == id {
 			tasks[i].Description = description
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
+// SetPriority updates the priority of an existing task.
+func (s *Store) SetPriority(id int, priority int) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			tasks[i].Priority = priority
 			found = true
 			break
 		}
@@ -190,7 +215,7 @@ func Migrate(jsonPath, txtPath string) error {
 		if idx := strings.Index(line, ". "); idx != -1 {
 			line = line[idx+2:]
 		}
-		tasks = append(tasks, Task{ID: count, Description: line, Completed: false})
+		tasks = append(tasks, Task{ID: count, Description: line, Completed: false, Priority: 2})
 		count++
 	}
 
