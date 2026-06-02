@@ -22,6 +22,9 @@ func TestStore_Add(t *testing.T) {
 		if task.Description != "First Task" {
 			t.Errorf("Expected description 'First Task', got '%s'", task.Description)
 		}
+		if task.Completed {
+			t.Error("Expected new task to be incomplete")
+		}
 	})
 
 	t.Run("Add second task", func(t *testing.T) {
@@ -40,7 +43,6 @@ func TestStore_Delete(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	// Setup: Add some tasks
 	store.Add("Task 1")
 	store.Add("Task 2")
 	store.Add("Task 3")
@@ -70,14 +72,53 @@ func TestStore_Delete(t *testing.T) {
 	})
 }
 
+func TestStore_ToggleCompleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	task, _ := store.Add("Test Completion")
+
+	t.Run("Mark as completed", func(t *testing.T) {
+		err := store.ToggleCompleted(task.ID)
+		if err != nil {
+			t.Fatalf("Failed to toggle completion: %v", err)
+		}
+
+		tasks, _ := store.Read()
+		if !tasks[0].Completed {
+			t.Error("Expected task to be completed")
+		}
+	})
+
+	t.Run("Mark as incomplete", func(t *testing.T) {
+		err := store.ToggleCompleted(task.ID)
+		if err != nil {
+			t.Fatalf("Failed to toggle completion: %v", err)
+		}
+
+		tasks, _ := store.Read()
+		if tasks[0].Completed {
+			t.Error("Expected task to be incomplete")
+		}
+	})
+
+	t.Run("Toggle non-existent task", func(t *testing.T) {
+		err := store.ToggleCompleted(99)
+		if err == nil {
+			t.Error("Expected error when toggling non-existent task, got nil")
+		}
+	})
+}
+
 func TestStore_ReadWrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
 	tasks := []Task{
-		{ID: 1, Description: "Task A"},
-		{ID: 2, Description: "Task B"},
+		{ID: 1, Description: "Task A", Completed: false},
+		{ID: 2, Description: "Task B", Completed: true},
 	}
 
 	if err := store.Write(tasks); err != nil {
@@ -95,6 +136,9 @@ func TestStore_ReadWrite(t *testing.T) {
 	if readTasks[0].Description != "Task A" || readTasks[1].Description != "Task B" {
 		t.Errorf("Tasks read back do not match original data: %v", readTasks)
 	}
+	if readTasks[1].Completed != true {
+		t.Error("Expected second task to be completed")
+	}
 }
 
 func TestMigrate(t *testing.T) {
@@ -102,7 +146,6 @@ func TestMigrate(t *testing.T) {
 	jsonPath := filepath.Join(tmpDir, "tasks.json")
 	txtPath := filepath.Join(tmpDir, "tasks.txt")
 
-	// Create a legacy tasks.txt file
 	legacyContent := "1. Legacy Task 1\n2. Legacy Task 2\n3. Legacy Task 3\n"
 	if err := os.WriteFile(txtPath, []byte(legacyContent), 0644); err != nil {
 		t.Fatalf("Failed to create legacy file: %v", err)
@@ -112,7 +155,6 @@ func TestMigrate(t *testing.T) {
 		t.Fatalf("Migration failed: %v", err)
 	}
 
-	// Verify JSON file was created
 	store := NewStore(jsonPath)
 	tasks, err := store.Read()
 	if err != nil {
@@ -127,7 +169,6 @@ func TestMigrate(t *testing.T) {
 		t.Errorf("Migrated data is incorrect: %v", tasks)
 	}
 
-	// Verify legacy file was backed up
 	if _, err := os.Stat(txtPath); !os.IsNotExist(err) {
 		t.Error("Legacy file should have been renamed to .bak")
 	}

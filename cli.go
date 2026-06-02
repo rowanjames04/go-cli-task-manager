@@ -16,7 +16,6 @@ func main() {
 	// Run migration from legacy tasks.txt if it exists
 	if err := Migrate(taskFile, legacyFile); err != nil {
 		fmt.Printf("Migration error: %v\n", err)
-		// We continue even if migration fails, as we can still use an empty JSON store
 	}
 
 	if len(os.Args) < 2 {
@@ -31,6 +30,8 @@ func main() {
 		handleAdd(store)
 	case "delete":
 		handleDelete(store)
+	case "done":
+		handleDone(store)
 	case "list":
 		handleList(store)
 	default:
@@ -76,6 +77,26 @@ func handleDelete(store *Store) {
 	fmt.Println("Deleted task", num)
 }
 
+func handleDone(store *Store) {
+	if len(os.Args) < 3 {
+		fmt.Println("Missing task number")
+		return
+	}
+
+	num, err := strconv.Atoi(os.Args[2])
+	if err != nil {
+		fmt.Println("Task number must be an integer")
+		return
+	}
+
+	if err := store.ToggleCompleted(num); err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	fmt.Printf("Toggled completion for task %d\n", num)
+}
+
 func handleList(store *Store) {
 	tasks, err := store.Read()
 	if err != nil {
@@ -89,13 +110,18 @@ func handleList(store *Store) {
 	}
 
 	for _, task := range tasks {
-		fmt.Printf("%d. %s\n", task.ID, task.Description)
+		status := "[ ]"
+		if task.Completed {
+			status = "[x]"
+		}
+		fmt.Printf("%d. %s %s\n", task.ID, status, task.Description)
 	}
 }
 
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  add \"task description\"")
+	fmt.Println("  done <task number>")
 	fmt.Println("  delete <task number>")
 	fmt.Println("  list")
 }

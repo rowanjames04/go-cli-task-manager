@@ -12,6 +12,7 @@ import (
 type Task struct {
 	ID          int    `json:"id"`
 	Description string `json:"description"`
+	Completed   bool   `json:"completed"`
 }
 
 // Store handles the persistence of tasks to a JSON file.
@@ -38,7 +39,6 @@ func (s *Store) Read() ([]Task, error) {
 	var tasks []Task
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&tasks); err != nil {
-		// If the file is empty, Decode returns EOF, which we can treat as an empty list.
 		if err.Error() == "EOF" {
 			return []Task{}, nil
 		}
@@ -70,7 +70,6 @@ func (s *Store) Add(description string) (Task, error) {
 
 	newID := 1
 	if len(tasks) > 0 {
-		// Find the maximum existing ID to ensure uniqueness
 		maxID := 0
 		for _, t := range tasks {
 			if t.ID > maxID {
@@ -83,6 +82,7 @@ func (s *Store) Add(description string) (Task, error) {
 	newTask := Task{
 		ID:          newID,
 		Description: description,
+		Completed:   false,
 	}
 
 	tasks = append(tasks, newTask)
@@ -117,15 +117,36 @@ func (s *Store) Delete(id int) error {
 	return s.Write(updatedTasks)
 }
 
+// ToggleCompleted flips the completion status of a task.
+func (s *Store) ToggleCompleted(id int) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			tasks[i].Completed = !tasks[i].Completed
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
 // Migrate converts a legacy tasks.txt file to the new JSON format.
 func Migrate(jsonPath, txtPath string) error {
 	if _, err := os.Stat(jsonPath); err == nil {
-		// jsonPath already exists, no migration needed
 		return nil
 	}
 
 	if _, err := os.Stat(txtPath); os.IsNotExist(err) {
-		// No txtPath to migrate from
 		return nil
 	}
 
@@ -143,12 +164,10 @@ func Migrate(jsonPath, txtPath string) error {
 		if line == "" {
 			continue
 		}
-
-		// strip "1. " prefix
 		if idx := strings.Index(line, ". "); idx != -1 {
 			line = line[idx+2:]
 		}
-		tasks = append(tasks, Task{ID: count, Description: line})
+		tasks = append(tasks, Task{ID: count, Description: line, Completed: false})
 		count++
 	}
 
@@ -156,12 +175,10 @@ func Migrate(jsonPath, txtPath string) error {
 		return err
 	}
 
-	// Use a temporary store for migration to handle the write
 	store := NewStore(jsonPath)
 	if err := store.Write(tasks); err != nil {
 		return err
 	}
 
-	// Rename legacy file to backup
 	return os.Rename(txtPath, txtPath+".bak")
 }
