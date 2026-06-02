@@ -16,6 +16,7 @@ type Task struct {
 	Completed   bool       `json:"completed"`
 	Priority    int        `json:"priority"` // 1: Low, 2: Medium, 3: High
 	DueDate     *time.Time `json:"due_date,omitempty"`
+	Tags        []string   `json:"tags"`
 }
 
 // Store handles the persistence of tasks to a JSON file.
@@ -65,7 +66,7 @@ func (s *Store) Write(tasks []Task) error {
 }
 
 // Add creates a new task and persists the updated list.
-func (s *Store) Add(description string, priority int, dueDate *time.Time) (Task, error) {
+func (s *Store) Add(description string, priority int, dueDate *time.Time, tags []string) (Task, error) {
 	tasks, err := s.Read()
 	if err != nil {
 		return Task{}, err
@@ -88,6 +89,7 @@ func (s *Store) Add(description string, priority int, dueDate *time.Time) (Task,
 		Completed:   false,
 		Priority:    priority,
 		DueDate:     dueDate,
+		Tags:        tags,
 	}
 
 	tasks = append(tasks, newTask)
@@ -202,6 +204,64 @@ func (s *Store) ToggleCompleted(id int) error {
 	for i := range tasks {
 		if tasks[i].ID == id {
 			tasks[i].Completed = !tasks[i].Completed
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
+// AddTag adds a tag to a task, avoiding duplicates.
+func (s *Store) AddTag(id int, tag string) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			// Check for duplicate tag
+			for _, t := range tasks[i].Tags {
+				if t == tag {
+					return nil // already has the tag
+				}
+			}
+			tasks[i].Tags = append(tasks[i].Tags, tag)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
+// RemoveTag removes a tag from a task.
+func (s *Store) RemoveTag(id int, tag string) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			var newTags []string
+			for _, t := range tasks[i].Tags {
+				if t != tag {
+					newTags = append(newTags, t)
+				}
+			}
+			tasks[i].Tags = newTags
 			found = true
 			break
 		}

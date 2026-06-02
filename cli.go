@@ -29,6 +29,7 @@ func main() {
 	// Add command
 	var priority int
 	var dueStr string
+	var tagsStr string
 	addCmd := &cobra.Command{
 		Use:   "add [description]",
 		Short: "Add a new task",
@@ -46,7 +47,12 @@ func main() {
 				dueDate = &t
 			}
 
-			task, err := store.Add(taskDescription, priority, dueDate)
+			var tags []string
+			if tagsStr != "" {
+				tags = strings.Split(tagsStr, ",")
+			}
+
+			task, err := store.Add(taskDescription, priority, dueDate, tags)
 			if err != nil {
 				fmt.Println("Error:", err)
 				return
@@ -56,6 +62,7 @@ func main() {
 	}
 	addCmd.Flags().IntVarP(&priority, "priority", "p", 2, "Priority level (1=Low, 2=Medium, 3=High)")
 	addCmd.Flags().StringVarP(&dueStr, "due", "d", "", "Due date in YYYY-MM-DD format")
+	addCmd.Flags().StringVarP(&tagsStr, "tags", "t", "", "Comma-separated list of tags")
 
 	// Done command
 	doneCmd := &cobra.Command{
@@ -163,10 +170,52 @@ func main() {
 		},
 	}
 
+	// Tag commands
+	tagCmd := &cobra.Command{
+		Use:   "tag",
+		Short: "Manage task tags",
+	}
+	tagAddCmd := &cobra.Command{
+		Use:   "add [id] [tag]",
+		Short: "Add a tag to a task",
+		Args:  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			if err := store.AddTag(num, args[1]); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Tag '%s' added to task %d\n", args[1], num)
+		},
+	}
+	tagRemCmd := &cobra.Command{
+		Use:   "remove [id] [tag]",
+		Short: "Remove a tag from a task",
+		Args:  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task number must be an integer")
+				return
+			}
+			if err := store.RemoveTag(num, args[1]); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Tag '%s' removed from task %d\n", args[1], num)
+		},
+	}
+	tagCmd.AddCommand(tagAddCmd, tagRemCmd)
+
 	// List command
 	var filterPending bool
 	var filterCompleted bool
 	var sortByPriority bool
+	var filterTag string
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -180,7 +229,24 @@ func main() {
 
 			var filteredTasks []Task
 			for _, task := range tasks {
-				if (!filterPending && !filterCompleted) || (filterPending && !task.Completed) || (filterCompleted && task.Completed) {
+				// Priority/Completed filters
+				match := (!filterPending && !filterCompleted) || (filterPending && !task.Completed) || (filterCompleted && task.Completed)
+
+				// Tag filter
+				if match && filterTag != "" {
+					hasTag := false
+					for _, t := range task.Tags {
+						if t == filterTag {
+							hasTag = true
+							break
+						}
+					}
+					if !hasTag {
+						match = false
+					}
+				}
+
+				if match {
 					filteredTasks = append(filteredTasks, task)
 				}
 			}
@@ -222,15 +288,21 @@ func main() {
 					}
 				}
 
-				fmt.Printf("%d. %s [%s] %s%s\n", task.ID, status, priorityLabel, task.Description, dueLabel)
+				tagsLabel := ""
+				if len(task.Tags) > 0 {
+					tagsLabel = fmt.Sprintf(" [%s]", strings.Join(task.Tags, ","))
+				}
+
+				fmt.Printf("%d. %s [%s] %s%s%s\n", task.ID, status, priorityLabel, task.Description, dueLabel, tagsLabel)
 			}
 		},
 	}
 	listCmd.Flags().BoolVarP(&filterPending, "pending", "p", false, "Show only pending tasks")
 	listCmd.Flags().BoolVarP(&filterCompleted, "completed", "c", false, "Show only completed tasks")
 	listCmd.Flags().BoolVarP(&sortByPriority, "priority", "s", false, "Sort by priority (High to Low)")
+	listCmd.Flags().StringVarP(&filterTag, "tag", "t", "", "Filter by tag")
 
-	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, listCmd)
+	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, tagCmd, listCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

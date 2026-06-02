@@ -13,7 +13,7 @@ func TestStore_Add(t *testing.T) {
 	store := NewStore(tmpFile)
 
 	t.Run("Add first task", func(t *testing.T) {
-		task, err := store.Add("First Task", 2, nil)
+		task, err := store.Add("First Task", 2, nil, []string{"tag1", "tag2"})
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -29,10 +29,13 @@ func TestStore_Add(t *testing.T) {
 		if task.Priority != 2 {
 			t.Errorf("Expected priority 2, got %d", task.Priority)
 		}
+		if len(task.Tags) != 2 || task.Tags[0] != "tag1" || task.Tags[1] != "tag2" {
+			t.Errorf("Expected tags [tag1, tag2], got %v", task.Tags)
+		}
 	})
 
 	t.Run("Add second task", func(t *testing.T) {
-		task, err := store.Add("Second Task", 3, nil)
+		task, err := store.Add("Second Task", 3, nil, nil)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -50,9 +53,9 @@ func TestStore_Delete(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	store.Add("Task 1", 2, nil)
-	store.Add("Task 2", 2, nil)
-	store.Add("Task 3", 2, nil)
+	store.Add("Task 1", 2, nil, nil)
+	store.Add("Task 2", 2, nil, nil)
+	store.Add("Task 3", 2, nil, nil)
 
 	t.Run("Delete existing task", func(t *testing.T) {
 		err := store.Delete(2)
@@ -84,7 +87,7 @@ func TestStore_ToggleCompleted(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Completion", 2, nil)
+	task, _ := store.Add("Test Completion", 2, nil, nil)
 
 	t.Run("Mark as completed", func(t *testing.T) {
 		err := store.ToggleCompleted(task.ID)
@@ -123,7 +126,7 @@ func TestStore_UpdateDescription(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Original Description", 2, nil)
+	task, _ := store.Add("Original Description", 2, nil, nil)
 
 	t.Run("Update existing task", func(t *testing.T) {
 		err := store.UpdateDescription(task.ID, "Updated Description")
@@ -150,7 +153,7 @@ func TestStore_SetPriority(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Priority", 2, nil)
+	task, _ := store.Add("Test Priority", 2, nil, nil)
 
 	t.Run("Set priority", func(t *testing.T) {
 		err := store.SetPriority(task.ID, 3)
@@ -177,7 +180,7 @@ func TestStore_SetDueDate(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Due Task", 2, nil)
+	task, _ := store.Add("Due Task", 2, nil, nil)
 	now := time.Now()
 
 	t.Run("Set due date", func(t *testing.T) {
@@ -200,14 +203,88 @@ func TestStore_SetDueDate(t *testing.T) {
 	})
 }
 
+func TestStore_AddTag(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	task, _ := store.Add("Tag Test", 2, nil, []string{"work"})
+
+	t.Run("Add new tag", func(t *testing.T) {
+		err := store.AddTag(task.ID, "urgent")
+		if err != nil {
+			t.Fatalf("Failed to add tag: %v", err)
+		}
+		tasks, _ := store.Read()
+		if len(tasks[0].Tags) != 2 {
+			t.Errorf("Expected 2 tags, got %d", len(tasks[0].Tags))
+		}
+	})
+
+	t.Run("Add duplicate tag", func(t *testing.T) {
+		err := store.AddTag(task.ID, "work")
+		if err != nil {
+			t.Fatalf("Failed to add duplicate tag: %v", err)
+		}
+		tasks, _ := store.Read()
+		if len(tasks[0].Tags) != 2 {
+			t.Errorf("Expected tags to remain at 2, got %d", len(tasks[0].Tags))
+		}
+	})
+
+	t.Run("Add tag to non-existent task", func(t *testing.T) {
+		err := store.AddTag(99, "ghost")
+		if err == nil {
+			t.Error("Expected error when adding tag to non-existent task, got nil")
+		}
+	})
+}
+
+func TestStore_RemoveTag(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	task, _ := store.Add("Tag Test", 2, nil, []string{"work", "home"})
+
+	t.Run("Remove existing tag", func(t *testing.T) {
+		err := store.RemoveTag(task.ID, "home")
+		if err != nil {
+			t.Fatalf("Failed to remove tag: %v", err)
+		}
+		tasks, _ := store.Read()
+		if len(tasks[0].Tags) != 1 || tasks[0].Tags[0] != "work" {
+			t.Errorf("Expected tags to be [work], got %v", tasks[0].Tags)
+		}
+	})
+
+	t.Run("Remove non-existent tag", func(t *testing.T) {
+		err := store.RemoveTag(task.ID, "ghost")
+		if err != nil {
+			t.Errorf("Removing non-existent tag should be a no-op, but got error: %v", err)
+		}
+		tasks, _ := store.Read()
+		if len(tasks[0].Tags) != 1 {
+			t.Error("Removing non-existent tag should not affect other tags")
+		}
+	})
+
+	t.Run("Remove tag from non-existent task", func(t *testing.T) {
+		err := store.RemoveTag(99, "work")
+		if err == nil {
+			t.Error("Expected error when removing tag from non-existent task, got nil")
+		}
+	})
+}
+
 func TestStore_ReadWrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
 	tasks := []Task{
-		{ID: 1, Description: "Task A", Completed: false, Priority: 1},
-		{ID: 2, Description: "Task B", Completed: true, Priority: 3},
+		{ID: 1, Description: "Task A", Completed: false, Priority: 1, Tags: []string{"a"}},
+		{ID: 2, Description: "Task B", Completed: true, Priority: 3, Tags: []string{"b"}},
 	}
 
 	if err := store.Write(tasks); err != nil {
