@@ -28,6 +28,8 @@ func main() {
 	switch command {
 	case "add":
 		handleAdd(store)
+	case "edit":
+		handleEdit(store)
 	case "delete":
 		handleDelete(store)
 	case "done":
@@ -77,6 +79,28 @@ func handleDelete(store *Store) {
 	fmt.Println("Deleted task", num)
 }
 
+func handleEdit(store *Store) {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: edit <task number> \"new description\"")
+		return
+	}
+
+	num, err := strconv.Atoi(os.Args[2])
+	if err != nil {
+		fmt.Println("Task number must be an integer")
+		return
+	}
+
+	newDescription := strings.Join(os.Args[3:], " ")
+
+	if err := store.UpdateDescription(num, newDescription); err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	fmt.Printf("Task %d updated to: %s\n", num, newDescription)
+}
+
 func handleDone(store *Store) {
 	if len(os.Args) < 3 {
 		fmt.Println("Missing task number")
@@ -121,6 +145,7 @@ func handleList(store *Store) {
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  add \"task description\"")
+	fmt.Println("  edit <task number> \"new description\"")
 	fmt.Println("  done <task number>")
 	fmt.Println("  delete <task number>")
 	fmt.Println("  list")

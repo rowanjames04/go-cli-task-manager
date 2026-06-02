@@ -111,6 +111,33 @@ func TestStore_ToggleCompleted(t *testing.T) {
 	})
 }
 
+func TestStore_UpdateDescription(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	task, _ := store.Add("Original Description")
+
+	t.Run("Update existing task", func(t *testing.T) {
+		err := store.UpdateDescription(task.ID, "Updated Description")
+		if err != nil {
+			t.Fatalf("Failed to update description: %v", err)
+		}
+
+		tasks, _ := store.Read()
+		if tasks[0].Description != "Updated Description" {
+			t.Errorf("Expected 'Updated Description', got '%s'", tasks[0].Description)
+		}
+	})
+
+	t.Run("Update non-existent task", func(t *testing.T) {
+		err := store.UpdateDescription(99, "Doesn't Matter")
+		if err == nil {
+			t.Error("Expected error when updating non-existent task, got nil")
+		}
+	})
+}
+
 func TestStore_ReadWrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "tasks.json")

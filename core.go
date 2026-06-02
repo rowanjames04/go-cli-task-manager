@@ -117,6 +117,29 @@ func (s *Store) Delete(id int) error {
 	return s.Write(updatedTasks)
 }
 
+// UpdateDescription modifies the description of an existing task.
+func (s *Store) UpdateDescription(id int, description string) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			tasks[i].Description = description
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
 // ToggleCompleted flips the completion status of a task.
 func (s *Store) ToggleCompleted(id int) error {
 	tasks, err := s.Read()
