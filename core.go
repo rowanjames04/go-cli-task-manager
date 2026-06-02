@@ -17,6 +17,7 @@ type Task struct {
 	Priority    int        `json:"priority"` // 1: Low, 2: Medium, 3: High
 	DueDate     *time.Time `json:"due_date,omitempty"`
 	Tags        []string   `json:"tags"`
+	ParentID    *int        `json:"parent_id,omitempty"`
 }
 
 // Store handles the persistence of tasks to a JSON file.
@@ -66,7 +67,7 @@ func (s *Store) Write(tasks []Task) error {
 }
 
 // Add creates a new task and persists the updated list.
-func (s *Store) Add(description string, priority int, dueDate *time.Time, tags []string) (Task, error) {
+func (s *Store) Add(description string, priority int, dueDate *time.Time, tags []string, parentID *int) (Task, error) {
 	tasks, err := s.Read()
 	if err != nil {
 		return Task{}, err
@@ -90,6 +91,7 @@ func (s *Store) Add(description string, priority int, dueDate *time.Time, tags [
 		Priority:    priority,
 		DueDate:     dueDate,
 		Tags:        tags,
+		ParentID:    parentID,
 	}
 
 	tasks = append(tasks, newTask)
@@ -226,10 +228,9 @@ func (s *Store) AddTag(id int, tag string) error {
 	found := false
 	for i := range tasks {
 		if tasks[i].ID == id {
-			// Check for duplicate tag
 			for _, t := range tasks[i].Tags {
 				if t == tag {
-					return nil // already has the tag
+					return nil
 				}
 			}
 			tasks[i].Tags = append(tasks[i].Tags, tag)
@@ -262,6 +263,29 @@ func (s *Store) RemoveTag(id int, tag string) error {
 				}
 			}
 			tasks[i].Tags = newTags
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("task %d does not exist", id)
+	}
+
+	return s.Write(tasks)
+}
+
+// MoveTask changes the parent of a task.
+func (s *Store) MoveTask(id int, parentID *int) error {
+	tasks, err := s.Read()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range tasks {
+		if tasks[i].ID == id {
+			tasks[i].ParentID = parentID
 			found = true
 			break
 		}

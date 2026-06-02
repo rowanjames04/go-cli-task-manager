@@ -30,6 +30,7 @@ func main() {
 	var priority int
 	var dueStr string
 	var tagsStr string
+	var parentID int
 	addCmd := &cobra.Command{
 		Use:   "add [description]",
 		Short: "Add a new task",
@@ -52,7 +53,13 @@ func main() {
 				tags = strings.Split(tagsStr, ",")
 			}
 
-			task, err := store.Add(taskDescription, priority, dueDate, tags)
+			var pID *int
+			if cmd.Flags().Changed("parent") {
+				p := parentID
+				pID = &p
+			}
+
+			task, err := store.Add(taskDescription, priority, dueDate, tags, pID)
 			if err != nil {
 				fmt.Println("Error:", err)
 				return
@@ -63,6 +70,7 @@ func main() {
 	addCmd.Flags().IntVarP(&priority, "priority", "p", 2, "Priority level (1=Low, 2=Medium, 3=High)")
 	addCmd.Flags().StringVarP(&dueStr, "due", "d", "", "Due date in YYYY-MM-DD format")
 	addCmd.Flags().StringVarP(&tagsStr, "tags", "t", "", "Comma-separated list of tags")
+	addCmd.Flags().IntVar(&parentID, "parent", 0, "ID of the parent task")
 
 	// Done command
 	doneCmd := &cobra.Command{
@@ -211,6 +219,37 @@ func main() {
 	}
 	tagCmd.AddCommand(tagAddCmd, tagRemCmd)
 
+	// Move command
+	moveCmd := &cobra.Command{
+		Use:   "move [id] [new_parent_id]",
+		Short: "Change the parent of a task",
+		Args:  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				fmt.Println("Task ID must be an integer")
+				return
+			}
+			pIDInt, err := strconv.Atoi(args[1])
+			if err != nil {
+				fmt.Println("Parent ID must be an integer")
+				return
+			}
+
+			var pID *int
+			if pIDInt != 0 {
+				p := pIDInt
+				pID = &p
+			}
+
+			if err := store.MoveTask(id, pID); err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+			fmt.Printf("Task %d moved under parent %d\n", id, pIDInt)
+		},
+	}
+
 	// List command
 	var filterPending bool
 	var filterCompleted bool
@@ -229,10 +268,7 @@ func main() {
 
 			var filteredTasks []Task
 			for _, task := range tasks {
-				// Priority/Completed filters
 				match := (!filterPending && !filterCompleted) || (filterPending && !task.Completed) || (filterCompleted && task.Completed)
-
-				// Tag filter
 				if match && filterTag != "" {
 					hasTag := false
 					for _, t := range task.Tags {
@@ -245,7 +281,6 @@ func main() {
 						match = false
 					}
 				}
-
 				if match {
 					filteredTasks = append(filteredTasks, task)
 				}
@@ -266,35 +301,62 @@ func main() {
 				return
 			}
 
-			now := time.Now().Truncate(24 * time.Hour)
-			for _, task := range filteredTasks {
-				status := "[ ]"
-				if task.Completed {
-					status = "[x]"
-				}
-				priorityLabel := "Med"
-				switch task.Priority {
-				case 1:
-					priorityLabel = "Low"
-				case 3:
-					priorityLabel = "High"
-				}
+			// For hierarchical display, we need to process the tasks.
+			// A simple approach: recursively print tasks.
+			printed := make(map[int]bool)
 
-				dueLabel := ""
-				if task.DueDate != nil {
-					dueLabel = fmt.Sprintf(" (Due: %s)", task.DueDate.Format("2006-01-02"))
-					if task.DueDate.Before(now) && !task.Completed {
-						dueLabel = " ⚠️ " + dueLabel
+			var printTask func(int, int)
+			printTask = func(id int, indent int) {
+				for _, t := range filteredTasks {
+					if t.ID == id {
+						status := "[ ]"
+						if t.Completed {
+							status = "[x]"
+						}
+						priorityLabel := "Med"
+						switch t.Priority {
+						case 1:
+							priorityLabel = "Low"
+						case 3:
+							priorityLabel = "High"
+						}
+						dueLabel := ""
+						if t.DueDate != nil {
+							dueLabel = fmt.Sprintf(" (Due: %s)", t.DueDate.Format("2006-01-02"))
+							now := time.Now().Truncate(24 * time.Hour)
+							if t.DueDate.Before(now) && !t.Completed {
+								dueLabel = " ⚠️ " + dueLabel
+							}
+						}
+						tagsLabel := ""
+						if len(t.Tags) > 0 {
+							tagsLabel = fmt.Sprintf(" [%s]", strings.Join(t.Tags, ","))
+						}
+
+						indentStr := strings.Repeat("  ", indent)
+						fmt.Printf("%s%d. %s [%s] %s%s%s\n", indentStr, t.ID, status, priorityLabel, t.Description, dueLabel, tagsLabel)
+						printed[t.ID] = true
+
+						// Print children
+						for _, child := range filteredTasks {
+							if child.ParentID != nil && *child.ParentID == t.ID {
+								printTask(child.ID, indent+1)
+							}
+						}
+						break
 					}
 				}
-
-				tagsLabel := ""
-				if len(task.Tags) > 0 {
-					tagsLabel = fmt.Sprintf(" [%s]", strings.Join(task.Tags, ","))
-				}
-
-				fmt.Printf("%d. %s [%s] %s%s%s\n", task.ID, status, priorityLabel, task.Description, dueLabel, tagsLabel)
 			}
+
+			// Print all top-level tasks
+			for _, t := range filteredTasks {
+				if t.ParentID == nil {
+					printTask(t.ID, 0)
+				}
+			}
+
+			// If we have an empty list but we only have child tasks (which shouldn't happen normally)
+			// the above handles it.
 		},
 	}
 	listCmd.Flags().BoolVarP(&filterPending, "pending", "p", false, "Show only pending tasks")
@@ -302,7 +364,7 @@ func main() {
 	listCmd.Flags().BoolVarP(&sortByPriority, "priority", "s", false, "Sort by priority (High to Low)")
 	listCmd.Flags().StringVarP(&filterTag, "tag", "t", "", "Filter by tag")
 
-	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, tagCmd, listCmd)
+	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, tagCmd, moveCmd, listCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

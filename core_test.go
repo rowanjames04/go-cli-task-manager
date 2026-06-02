@@ -13,7 +13,7 @@ func TestStore_Add(t *testing.T) {
 	store := NewStore(tmpFile)
 
 	t.Run("Add first task", func(t *testing.T) {
-		task, err := store.Add("First Task", 2, nil, []string{"tag1", "tag2"})
+		task, err := store.Add("First Task", 2, nil, []string{"tag1", "tag2"}, nil)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -35,7 +35,7 @@ func TestStore_Add(t *testing.T) {
 	})
 
 	t.Run("Add second task", func(t *testing.T) {
-		task, err := store.Add("Second Task", 3, nil, nil)
+		task, err := store.Add("Second Task", 3, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Failed to add task: %v", err)
 		}
@@ -53,9 +53,9 @@ func TestStore_Delete(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	store.Add("Task 1", 2, nil, nil)
-	store.Add("Task 2", 2, nil, nil)
-	store.Add("Task 3", 2, nil, nil)
+	store.Add("Task 1", 2, nil, nil, nil)
+	store.Add("Task 2", 2, nil, nil, nil)
+	store.Add("Task 3", 2, nil, nil, nil)
 
 	t.Run("Delete existing task", func(t *testing.T) {
 		err := store.Delete(2)
@@ -87,7 +87,7 @@ func TestStore_ToggleCompleted(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Completion", 2, nil, nil)
+	task, _ := store.Add("Test Completion", 2, nil, nil, nil)
 
 	t.Run("Mark as completed", func(t *testing.T) {
 		err := store.ToggleCompleted(task.ID)
@@ -126,7 +126,7 @@ func TestStore_UpdateDescription(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Original Description", 2, nil, nil)
+	task, _ := store.Add("Original Description", 2, nil, nil, nil)
 
 	t.Run("Update existing task", func(t *testing.T) {
 		err := store.UpdateDescription(task.ID, "Updated Description")
@@ -153,7 +153,7 @@ func TestStore_SetPriority(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Test Priority", 2, nil, nil)
+	task, _ := store.Add("Test Priority", 2, nil, nil, nil)
 
 	t.Run("Set priority", func(t *testing.T) {
 		err := store.SetPriority(task.ID, 3)
@@ -180,7 +180,7 @@ func TestStore_SetDueDate(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Due Task", 2, nil, nil)
+	task, _ := store.Add("Due Task", 2, nil, nil, nil)
 	now := time.Now()
 
 	t.Run("Set due date", func(t *testing.T) {
@@ -208,7 +208,7 @@ func TestStore_AddTag(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Tag Test", 2, nil, []string{"work"})
+	task, _ := store.Add("Tag Test", 2, nil, []string{"work"}, nil)
 
 	t.Run("Add new tag", func(t *testing.T) {
 		err := store.AddTag(task.ID, "urgent")
@@ -245,7 +245,7 @@ func TestStore_RemoveTag(t *testing.T) {
 	tmpFile := filepath.Join(tmpDir, "tasks.json")
 	store := NewStore(tmpFile)
 
-	task, _ := store.Add("Tag Test", 2, nil, []string{"work", "home"})
+	task, _ := store.Add("Tag Test", 2, nil, []string{"work", "home"}, nil)
 
 	t.Run("Remove existing tag", func(t *testing.T) {
 		err := store.RemoveTag(task.ID, "home")
@@ -273,6 +273,53 @@ func TestStore_RemoveTag(t *testing.T) {
 		err := store.RemoveTag(99, "work")
 		if err == nil {
 			t.Error("Expected error when removing tag from non-existent task, got nil")
+		}
+	})
+}
+
+func TestStore_MoveTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "tasks.json")
+	store := NewStore(tmpFile)
+
+	parent, _ := store.Add("Parent Task", 2, nil, nil, nil)
+	child, _ := store.Add("Child Task", 2, nil, nil, &parent.ID)
+
+	t.Run("Move task to new parent", func(t *testing.T) {
+		parent2, _ := store.Add("Parent 2", 2, nil, nil, nil)
+		err := store.MoveTask(child.ID, &parent2.ID)
+		if err != nil {
+			t.Fatalf("Failed to move task: %v", err)
+		}
+		tasks, _ := store.Read()
+		for _, task := range tasks {
+			if task.ID == child.ID {
+				if task.ParentID == nil || *task.ParentID != parent2.ID {
+					t.Errorf("Expected parent ID %d, got %v", parent2.ID, task.ParentID)
+				}
+			}
+		}
+	})
+
+	t.Run("Move task to root", func(t *testing.T) {
+		err := store.MoveTask(child.ID, nil)
+		if err != nil {
+			t.Fatalf("Failed to move task to root: %v", err)
+		}
+		tasks, _ := store.Read()
+		for _, task := range tasks {
+			if task.ID == child.ID {
+				if task.ParentID != nil {
+					t.Errorf("Expected no parent, got %v", task.ParentID)
+				}
+			}
+		}
+	})
+
+	t.Run("Move non-existent task", func(t *testing.T) {
+		err := store.MoveTask(99, nil)
+		if err == nil {
+			t.Error("Expected error when moving non-existent task, got nil")
 		}
 	})
 }
