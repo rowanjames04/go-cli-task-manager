@@ -7,9 +7,18 @@ import (
 	"strings"
 )
 
-const taskFile = "tasks.txt"
+const taskFile = "tasks.json"
+const legacyFile = "tasks.txt"
 
 func main() {
+	store := NewStore(taskFile)
+
+	// Run migration from legacy tasks.txt if it exists
+	if err := Migrate(taskFile, legacyFile); err != nil {
+		fmt.Printf("Migration error: %v\n", err)
+		// We continue even if migration fails, as we can still use an empty JSON store
+	}
+
 	if len(os.Args) < 2 {
 		printUsage()
 		return
@@ -19,34 +28,35 @@ func main() {
 
 	switch command {
 	case "add":
-		handleAdd()
+		handleAdd(store)
 	case "delete":
-		handleDelete()
+		handleDelete(store)
 	case "list":
-		handleList()
+		handleList(store)
 	default:
 		fmt.Println("Unknown command:", command)
 		printUsage()
 	}
 }
 
-func handleAdd() {
+func handleAdd(store *Store) {
 	if len(os.Args) < 3 {
 		fmt.Println("Missing task description")
 		return
 	}
 
-	task := strings.Join(os.Args[2:], " ")
+	taskDescription := strings.Join(os.Args[2:], " ")
 
-	if err := addTask(taskFile, task); err != nil {
+	task, err := store.Add(taskDescription)
+	if err != nil {
 		fmt.Println("Error:", err)
 		return
 	}
 
-	fmt.Println("Task added:", task)
+	fmt.Printf("Task added: %s (ID: %d)\n", task.Description, task.ID)
 }
 
-func handleDelete() {
+func handleDelete(store *Store) {
 	if len(os.Args) < 3 {
 		fmt.Println("Missing task number")
 		return
@@ -58,7 +68,7 @@ func handleDelete() {
 		return
 	}
 
-	if err := deleteTask(taskFile, num); err != nil {
+	if err := store.Delete(num); err != nil {
 		fmt.Println("Error:", err)
 		return
 	}
@@ -66,8 +76,8 @@ func handleDelete() {
 	fmt.Println("Deleted task", num)
 }
 
-func handleList() {
-	tasks, err := readTasks(taskFile)
+func handleList(store *Store) {
+	tasks, err := store.Read()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -78,11 +88,10 @@ func handleList() {
 		return
 	}
 
-	for i, task := range tasks {
-		fmt.Printf("%d. %s\n", i+1, task)
+	for _, task := range tasks {
+		fmt.Printf("%d. %s\n", task.ID, task.Description)
 	}
 }
-
 
 func printUsage() {
 	fmt.Println("Usage:")
@@ -90,4 +99,3 @@ func printUsage() {
 	fmt.Println("  delete <task number>")
 	fmt.Println("  list")
 }
-
