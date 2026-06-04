@@ -364,7 +364,21 @@ func main() {
 	listCmd.Flags().BoolVarP(&sortByPriority, "priority", "s", false, "Sort by priority (High to Low)")
 	listCmd.Flags().StringVarP(&filterTag, "tag", "t", "", "Filter by tag")
 
-	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, tagCmd, moveCmd, listCmd)
+	// TUI command
+	tuiCmd := &cobra.Command{
+		Use:   "tui",
+		Short: "Launch the interactive TUI",
+		Run: func(cmd *cobra.Command, args []string) {
+			tuiApp := NewTaskApp(store)
+			tuiApp.Init()
+			if err := tuiApp.Run(); err != nil {
+				fmt.Printf("Error running TUI: %v\n", err)
+				os.Exit(1)
+			}
+		},
+	}
+
+	rootCmd.AddCommand(addCmd, doneCmd, deleteCmd, editCmd, priorityCmd, dueCmd, tagCmd, moveCmd, listCmd, tuiCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
